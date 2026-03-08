@@ -1,0 +1,71 @@
+name: Build and Release SQLite WASM
+
+on:
+  push:
+    tags:
+      - "*"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "ref_name=${{ github.ref_name }}"
+          echo "release_tag=${{ github.event.release.tag_name || '' }}"
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          # For release events, ensure we build exactly the released tag.
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            tcl \
+            wget \
+            unzip \
+            wabt
+
+      - name: Set up Emscripten SDK
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install latest
+          "$RUNNER_TEMP/emsdk/emsdk" activate latest
+
+      - name: Configure build for emsdk
+        run: ./configure --with-emsdk="$RUNNER_TEMP/emsdk"
+
+      - name: Build WASM distribution package
+        run: |
+          make -C ext/wasm dist
+          ls -lh ext/wasm/sqlite-wasm-*.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-wasm-dist
+          path: ext/wasm/sqlite-wasm-*.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' || github.event_name == 'release'
+        with:
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          files: ext/wasm/sqlite-wasm-*.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          generate_release_notes: true
