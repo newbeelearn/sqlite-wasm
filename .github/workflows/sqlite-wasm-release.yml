@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -41,32 +43,19 @@ jobs:
           make -C ext/wasm dist
           ls -lh ext/wasm/sqlite-wasm-*.zip
 
-      - name: Prepare release metadata
-        id: metadata
-        run: |
-          shopt -s nullglob
-          files=(ext/wasm/sqlite-wasm-*.zip)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No dist zip files found" >&2
-            exit 1
-          fi
-          {
-            echo "assets<<EOF"
-            printf '%s\n' "${files[@]}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: sqlite-wasm-dist
-          path: ${{ steps.metadata.outputs.assets }}
+          path: ext/wasm/sqlite-wasm-*.zip
           if-no-files-found: error
 
-      - name: Publish GitHub release
+      - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || github.event_name == 'release'
         with:
-          files: ${{ steps.metadata.outputs.assets }}
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          files: ext/wasm/sqlite-wasm-*.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
           generate_release_notes: true
