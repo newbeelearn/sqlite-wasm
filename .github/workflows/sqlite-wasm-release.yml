@@ -3,7 +3,7 @@ name: Build and Release SQLite WASM
 on:
   push:
     tags:
-      - "v*"
+      - "*"
   release:
     types: [published]
   workflow_dispatch:
@@ -16,8 +16,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Print trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "ref_name=${{ github.ref_name }}"
+          echo "release_tag=${{ github.event.release.tag_name || '' }}"
+
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          # For release events, ensure we build exactly the released tag.
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Install system dependencies
         run: |
